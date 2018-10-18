@@ -1,3 +1,5 @@
+// +build !windows
+
 package portallocator
 
 import (
@@ -120,7 +122,7 @@ func (p *PortAllocator) RequestPortInRange(ip net.IP, proto string, portStart, p
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	if proto != "tcp" && proto != "udp" {
+	if proto != "tcp" && proto != "udp" && proto != "sctp" {
 		return 0, ErrUnknownProtocol
 	}
 
@@ -131,8 +133,9 @@ func (p *PortAllocator) RequestPortInRange(ip net.IP, proto string, portStart, p
 	protomap, ok := p.ipMap[ipstr]
 	if !ok {
 		protomap = protoMap{
-			"tcp": p.newPortMap(),
-			"udp": p.newPortMap(),
+			"tcp":  p.newPortMap(),
+			"udp":  p.newPortMap(),
+			"sctp": p.newPortMap(),
 		}
 
 		p.ipMap[ipstr] = protomap

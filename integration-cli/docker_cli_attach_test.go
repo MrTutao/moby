@@ -12,7 +12,7 @@ import (
 
 	"github.com/docker/docker/integration-cli/cli"
 	"github.com/go-check/check"
-	"github.com/gotestyourself/gotestyourself/icmd"
+	"gotest.tools/icmd"
 )
 
 const attachWait = 5 * time.Second
@@ -147,7 +147,10 @@ func (s *DockerSuite) TestAttachDisconnect(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer stdout.Close()
 	c.Assert(cmd.Start(), check.IsNil)
-	defer cmd.Process.Kill()
+	defer func() {
+		cmd.Process.Kill()
+		cmd.Wait()
+	}()
 
 	_, err = stdin.Write([]byte("hello\n"))
 	c.Assert(err, check.IsNil)

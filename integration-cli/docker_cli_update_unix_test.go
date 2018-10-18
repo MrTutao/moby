@@ -13,7 +13,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/integration-cli/checker"
-	"github.com/docker/docker/integration-cli/request"
+	"github.com/docker/docker/internal/test/request"
 	"github.com/docker/docker/pkg/parsers/kernel"
 	"github.com/go-check/check"
 	"github.com/kr/pty"
@@ -180,7 +180,7 @@ func GetKernelVersion() *kernel.VersionInfo {
 // CheckKernelVersion checks if current kernel is newer than (or equal to)
 // the given version.
 func CheckKernelVersion(k, major, minor int) bool {
-	return kernel.CompareKernelVersion(*GetKernelVersion(), kernel.VersionInfo{Kernel: k, Major: major, Minor: minor}) > 0
+	return kernel.CompareKernelVersion(*GetKernelVersion(), kernel.VersionInfo{Kernel: k, Major: major, Minor: minor}) >= 0
 }
 
 func (s *DockerSuite) TestUpdateSwapMemoryOnly(c *check.C) {
@@ -324,7 +324,7 @@ func (s *DockerSuite) TestUpdateWithNanoCPUs(c *check.C) {
 	c.Assert(err, checker.NotNil)
 	c.Assert(out, checker.Contains, "Conflicting options: CPU Quota cannot be updated as NanoCPUs has already been set")
 
-	out, _ = dockerCmd(c, "update", "--cpus", "0.8", "top")
+	dockerCmd(c, "update", "--cpus", "0.8", "top")
 	inspect, err = clt.ContainerInspect(context.Background(), "top")
 	c.Assert(err, checker.IsNil)
 	c.Assert(inspect.HostConfig.NanoCPUs, checker.Equals, int64(800000000))

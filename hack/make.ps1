@@ -114,12 +114,6 @@ Function Get-GitCommit() {
     return $gitCommit
 }
 
-# Utility function to get get the current build version of docker
-Function Get-DockerVersion() {
-    if (-not (Test-Path ".\VERSION")) { Throw "VERSION file not found. Is this running from the root of a docker repository?" }
-    return $(Get-Content ".\VERSION" -raw).ToString().Replace("`n","").Trim()
-}
-
 # Utility function to determine if we are running in a container or not.
 # In Windows, we get this through an environment variable set in `Dockerfile.Windows`
 Function Check-InContainer() {
@@ -136,7 +130,7 @@ Function Check-InContainer() {
 # outside of a container where it may be out of date with master.
 Function Verify-GoVersion() {
     Try {
-        $goVersionDockerfile=(Get-Content ".\Dockerfile" | Select-String "ENV GO_VERSION").ToString().Split(" ")[2]
+        $goVersionDockerfile=(Select-String -Path ".\Dockerfile" -Pattern "^FROM golang:").ToString().Split(" ")[1].SubString(7) -replace '\.0$',''
         $goVersionInstalled=(go version).ToString().Split(" ")[2].SubString(2)
     }
     Catch [Exception] {
@@ -257,10 +251,10 @@ Function Validate-PkgImports($headCommit, $upstreamCommit) {
         if ($LASTEXITCODE -ne 0) { Throw "Failed go list for dependencies on $file" }
         $imports = $imports -Replace "\[" -Replace "\]", "" -Split(" ") | Sort-Object | Get-Unique
         # Filter out what we are looking for
-        $imports = $imports -NotMatch "^github.com/docker/docker/pkg/" `
-                            -NotMatch "^github.com/docker/docker/vendor" `
-                            -Match "^github.com/docker/docker" `
-                            -Replace "`n", ""
+        $imports = @() + $imports -NotMatch "^github.com/docker/docker/pkg/" `
+                                  -NotMatch "^github.com/docker/docker/vendor" `
+                                  -Match "^github.com/docker/docker" `
+                                  -Replace "`n", ""
         $imports | % { $badFiles+="$file imports $_`n" }
     }
     if ($badFiles.Length -eq 0) {
@@ -356,7 +350,7 @@ Try {
     if ($CommitSuffix -ne "") { $gitCommit += "-"+$CommitSuffix -Replace ' ', '' }
 
     # Get the version of docker (eg 17.04.0-dev)
-    $dockerVersion=Get-DockerVersion
+    $dockerVersion="0.0.0-dev"
 
     # Give a warning if we are not running in a container and are building binaries or running unit tests.
     # Not relevant for validation tests as these are fine to run outside of a container.
@@ -371,7 +365,7 @@ Try {
     # Run autogen if building binaries or running unit tests.
     if ($Client -or $Daemon -or $TestUnit) {
         Write-Host "INFO: Invoking autogen..."
-        Try { .\hack\make\.go-autogen.ps1 -CommitString $gitCommit -DockerVersion $dockerVersion }
+        Try { .\hack\make\.go-autogen.ps1 -CommitString $gitCommit -DockerVersion $dockerVersion -Platform "$env:PLATFORM" -Product "$env:PRODUCT" }
         Catch [Exception] { Throw $_ }
     }
 
@@ -443,6 +437,7 @@ Try {
 }
 Catch [Exception] {
     Write-Host -ForegroundColor Red ("`nERROR: make.ps1 failed:`n$_")
+    Write-Host -ForegroundColor Red ($_.InvocationInfo.PositionMessage)
 
     # More gratuitous ASCII art.
     Write-Host

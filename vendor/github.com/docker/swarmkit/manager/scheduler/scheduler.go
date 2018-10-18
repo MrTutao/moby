@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"time"
 
 	"github.com/docker/swarmkit/api"
@@ -9,7 +10,6 @@ import (
 	"github.com/docker/swarmkit/manager/state"
 	"github.com/docker/swarmkit/manager/state/store"
 	"github.com/docker/swarmkit/protobuf/ptypes"
-	"golang.org/x/net/context"
 )
 
 const (
@@ -71,6 +71,12 @@ func (s *Scheduler) setupTasksList(tx store.ReadTx) error {
 		// Ignore all tasks that have not reached PENDING
 		// state and tasks that no longer consume resources.
 		if t.Status.State < api.TaskStatePending || t.Status.State > api.TaskStateRunning {
+			continue
+		}
+
+		// Also ignore tasks that have not yet been assigned but desired state is beyond TaskStateRunning
+		// This can happen if you update, delete or scale down a service before its tasks were assigned.
+		if t.Status.State == api.TaskStatePending && t.DesiredState > api.TaskStateRunning {
 			continue
 		}
 
@@ -446,7 +452,9 @@ func (s *Scheduler) applySchedulingDecisions(ctx context.Context, schedulingDeci
 						continue
 					}
 
-					if t.Status.State == decision.new.Status.State && t.Status.Message == decision.new.Status.Message {
+					if t.Status.State == decision.new.Status.State &&
+						t.Status.Message == decision.new.Status.Message &&
+						t.Status.Err == decision.new.Status.Err {
 						// No changes, ignore
 						continue
 					}
@@ -502,7 +510,7 @@ func (s *Scheduler) taskFitNode(ctx context.Context, t *api.Task, nodeID string)
 	if !s.pipeline.Process(&nodeInfo) {
 		// this node cannot accommodate this task
 		newT.Status.Timestamp = ptypes.MustTimestampProto(time.Now())
-		newT.Status.Message = s.pipeline.Explain()
+		newT.Status.Err = s.pipeline.Explain()
 		s.allTasks[t.ID] = &newT
 
 		return &newT
@@ -694,17 +702,28 @@ func (s *Scheduler) scheduleNTasksOnNodes(ctx context.Context, n int, taskGroup 
 	return tasksScheduled
 }
 
+// noSuitableNode checks unassigned tasks and make sure they have an existing service in the store before
+// updating the task status and adding it back to: schedulingDecisions, unassignedTasks and allTasks
 func (s *Scheduler) noSuitableNode(ctx context.Context, taskGroup map[string]*api.Task, schedulingDecisions map[string]schedulingDecision) {
 	explanation := s.pipeline.Explain()
 	for _, t := range taskGroup {
+		var service *api.Service
+		s.store.View(func(tx store.ReadTx) {
+			service = store.GetService(tx, t.ServiceID)
+		})
+		if service == nil {
+			log.G(ctx).WithField("task.id", t.ID).Debug("removing task from the scheduler")
+			continue
+		}
+
 		log.G(ctx).WithField("task.id", t.ID).Debug("no suitable node available for task")
 
 		newT := *t
 		newT.Status.Timestamp = ptypes.MustTimestampProto(time.Now())
 		if explanation != "" {
-			newT.Status.Message = "no suitable node (" + explanation + ")"
+			newT.Status.Err = "no suitable node (" + explanation + ")"
 		} else {
-			newT.Status.Message = "no suitable node"
+			newT.Status.Err = "no suitable node"
 		}
 		s.allTasks[t.ID] = &newT
 		schedulingDecisions[t.ID] = schedulingDecision{old: t, new: &newT}

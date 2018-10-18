@@ -1,6 +1,8 @@
 package global
 
 import (
+	"context"
+
 	"github.com/docker/swarmkit/api"
 	"github.com/docker/swarmkit/log"
 	"github.com/docker/swarmkit/manager/constraint"
@@ -9,7 +11,6 @@ import (
 	"github.com/docker/swarmkit/manager/orchestrator/taskinit"
 	"github.com/docker/swarmkit/manager/orchestrator/update"
 	"github.com/docker/swarmkit/manager/state/store"
-	"golang.org/x/net/context"
 )
 
 type globalService struct {
@@ -73,7 +74,7 @@ func (g *Orchestrator) Run(ctx context.Context) error {
 	var err error
 	g.store.View(func(readTx store.ReadTx) {
 		var clusters []*api.Cluster
-		clusters, err = store.FindClusters(readTx, store.ByName("default"))
+		clusters, err = store.FindClusters(readTx, store.ByName(store.DefaultClusterName))
 
 		if len(clusters) != 1 {
 			return // just pick up the cluster when it is created.
@@ -147,7 +148,7 @@ func (g *Orchestrator) Run(ctx context.Context) error {
 				if !orchestrator.IsGlobalService(v.Service) {
 					continue
 				}
-				orchestrator.DeleteServiceTasks(ctx, g.store, v.Service)
+				orchestrator.SetServiceTasksRemove(ctx, g.store, v.Service)
 				// delete the service from service map
 				delete(g.globalServices, v.Service.ID)
 				g.restarts.ClearServiceHistory(v.Service.ID)
@@ -463,7 +464,7 @@ func (g *Orchestrator) reconcileOneNode(ctx context.Context, node *api.Node) {
 				)
 
 				for _, t := range tasks[serviceID] {
-					if orchestrator.IsTaskDirty(service.Service, t) {
+					if orchestrator.IsTaskDirty(service.Service, t, node) {
 						dirtyTasks = append(dirtyTasks, t)
 					} else {
 						cleanTasks = append(cleanTasks, t)
@@ -584,12 +585,4 @@ func (g *Orchestrator) SlotTuple(t *api.Task) orchestrator.SlotTuple {
 		ServiceID: t.ServiceID,
 		NodeID:    t.NodeID,
 	}
-}
-
-func isTaskCompleted(t *api.Task, restartPolicy api.RestartPolicy_RestartCondition) bool {
-	if t == nil || t.DesiredState <= api.TaskStateRunning {
-		return false
-	}
-	return restartPolicy == api.RestartOnNone ||
-		(restartPolicy == api.RestartOnFailure && t.Status.State == api.TaskStateCompleted)
 }

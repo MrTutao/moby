@@ -7,21 +7,21 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/docker/docker/pkg/stringutils"
+	"github.com/docker/docker/internal/testutil"
 	"github.com/go-check/check"
-	"github.com/gotestyourself/gotestyourself/icmd"
 	"github.com/pkg/errors"
+	"gotest.tools/icmd"
 )
 
 func getPrefixAndSlashFromDaemonPlatform() (prefix, slash string) {
-	if testEnv.DaemonPlatform() == "windows" {
+	if testEnv.OSType == "windows" {
 		return "c:", `\`
 	}
 	return "", "/"
 }
 
 // TODO: update code to call cmd.RunCmd directly, and remove this function
-// Deprecated: use gotestyourself/gotestyourself/icmd
+// Deprecated: use gotest.tools/icmd
 func runCommandWithOutput(execCmd *exec.Cmd) (string, int, error) {
 	result := icmd.RunCmd(transformCmd(execCmd))
 	return result.Combined(), result.ExitCode, result.Error
@@ -60,7 +60,7 @@ func RandomTmpDirPath(s string, platform string) string {
 	if platform == "windows" {
 		tmp = os.Getenv("TEMP")
 	}
-	path := filepath.Join(tmp, fmt.Sprintf("%s.%s", s, stringutils.GenerateRandomAlphaOnlyString(10)))
+	path := filepath.Join(tmp, fmt.Sprintf("%s.%s", s, testutil.GenerateRandomAlphaOnlyString(10)))
 	if platform == "windows" {
 		return filepath.FromSlash(path) // Using \
 	}
@@ -119,7 +119,7 @@ type elementListOptions struct {
 }
 
 func existingElements(c *check.C, opts elementListOptions) []string {
-	args := []string{}
+	var args []string
 	switch opts.element {
 	case "container":
 		args = append(args, "ps", "-a")
@@ -136,7 +136,7 @@ func existingElements(c *check.C, opts elementListOptions) []string {
 		args = append(args, "--format", opts.format)
 	}
 	out, _ := dockerCmd(c, args...)
-	lines := []string{}
+	var lines []string
 	for _, l := range strings.Split(out, "\n") {
 		if l != "" {
 			lines = append(lines, l)

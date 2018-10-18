@@ -1,4 +1,4 @@
-package environment
+package environment // import "github.com/docker/docker/internal/test/environment"
 
 import (
 	"context"
@@ -6,9 +6,11 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	dclient "github.com/docker/docker/client"
-	"github.com/docker/docker/integration-cli/fixtures/load"
-	"github.com/stretchr/testify/require"
+	"github.com/docker/docker/internal/test"
+	"gotest.tools/assert"
 )
+
+var frozenImages = []string{"busybox:latest", "busybox:glibc", "hello-world:frozen", "debian:jessie"}
 
 type protectedElements struct {
 	containers map[string]struct{}
@@ -32,6 +34,9 @@ func newProtectedElements() protectedElements {
 // volumes, and, on Linux, plugins) from being cleaned up at the end of test
 // runs
 func ProtectAll(t testingT, testEnv *Execution) {
+	if ht, ok := t.(test.HelperT); ok {
+		ht.Helper()
+	}
 	ProtectContainers(t, testEnv)
 	ProtectImages(t, testEnv)
 	ProtectNetworks(t, testEnv)
@@ -44,6 +49,9 @@ func ProtectAll(t testingT, testEnv *Execution) {
 // ProtectContainer adds the specified container(s) to be protected in case of
 // clean
 func (e *Execution) ProtectContainer(t testingT, containers ...string) {
+	if ht, ok := t.(test.HelperT); ok {
+		ht.Helper()
+	}
 	for _, container := range containers {
 		e.protectedElements.containers[container] = struct{}{}
 	}
@@ -52,18 +60,24 @@ func (e *Execution) ProtectContainer(t testingT, containers ...string) {
 // ProtectContainers protects existing containers from being cleaned up at the
 // end of test runs
 func ProtectContainers(t testingT, testEnv *Execution) {
+	if ht, ok := t.(test.HelperT); ok {
+		ht.Helper()
+	}
 	containers := getExistingContainers(t, testEnv)
 	testEnv.ProtectContainer(t, containers...)
 }
 
-func getExistingContainers(t require.TestingT, testEnv *Execution) []string {
+func getExistingContainers(t assert.TestingT, testEnv *Execution) []string {
+	if ht, ok := t.(test.HelperT); ok {
+		ht.Helper()
+	}
 	client := testEnv.APIClient()
 	containerList, err := client.ContainerList(context.Background(), types.ContainerListOptions{
 		All: true,
 	})
-	require.NoError(t, err, "failed to list containers")
+	assert.NilError(t, err, "failed to list containers")
 
-	containers := []string{}
+	var containers []string
 	for _, container := range containerList {
 		containers = append(containers, container.ID)
 	}
@@ -72,6 +86,9 @@ func getExistingContainers(t require.TestingT, testEnv *Execution) []string {
 
 // ProtectImage adds the specified image(s) to be protected in case of clean
 func (e *Execution) ProtectImage(t testingT, images ...string) {
+	if ht, ok := t.(test.HelperT); ok {
+		ht.Helper()
+	}
 	for _, image := range images {
 		e.protectedElements.images[image] = struct{}{}
 	}
@@ -80,15 +97,21 @@ func (e *Execution) ProtectImage(t testingT, images ...string) {
 // ProtectImages protects existing images and on linux frozen images from being
 // cleaned up at the end of test runs
 func ProtectImages(t testingT, testEnv *Execution) {
+	if ht, ok := t.(test.HelperT); ok {
+		ht.Helper()
+	}
 	images := getExistingImages(t, testEnv)
 
 	if testEnv.OSType == "linux" {
-		images = append(images, ensureFrozenImagesLinux(t, testEnv)...)
+		images = append(images, frozenImages...)
 	}
 	testEnv.ProtectImage(t, images...)
 }
 
-func getExistingImages(t require.TestingT, testEnv *Execution) []string {
+func getExistingImages(t assert.TestingT, testEnv *Execution) []string {
+	if ht, ok := t.(test.HelperT); ok {
+		ht.Helper()
+	}
 	client := testEnv.APIClient()
 	filter := filters.NewArgs()
 	filter.Add("dangling", "false")
@@ -96,9 +119,9 @@ func getExistingImages(t require.TestingT, testEnv *Execution) []string {
 		All:     true,
 		Filters: filter,
 	})
-	require.NoError(t, err, "failed to list images")
+	assert.NilError(t, err, "failed to list images")
 
-	images := []string{}
+	var images []string
 	for _, image := range imageList {
 		images = append(images, tagsFromImageSummary(image)...)
 	}
@@ -106,7 +129,7 @@ func getExistingImages(t require.TestingT, testEnv *Execution) []string {
 }
 
 func tagsFromImageSummary(image types.ImageSummary) []string {
-	result := []string{}
+	var result []string
 	for _, tag := range image.RepoTags {
 		if tag != "<none>:<none>" {
 			result = append(result, tag)
@@ -120,18 +143,12 @@ func tagsFromImageSummary(image types.ImageSummary) []string {
 	return result
 }
 
-func ensureFrozenImagesLinux(t testingT, testEnv *Execution) []string {
-	images := []string{"busybox:latest", "hello-world:frozen", "debian:jessie"}
-	err := load.FrozenImagesLinux(testEnv.APIClient(), images...)
-	if err != nil {
-		t.Fatalf("Failed to load frozen images: %s", err)
-	}
-	return images
-}
-
 // ProtectNetwork adds the specified network(s) to be protected in case of
 // clean
 func (e *Execution) ProtectNetwork(t testingT, networks ...string) {
+	if ht, ok := t.(test.HelperT); ok {
+		ht.Helper()
+	}
 	for _, network := range networks {
 		e.protectedElements.networks[network] = struct{}{}
 	}
@@ -140,16 +157,22 @@ func (e *Execution) ProtectNetwork(t testingT, networks ...string) {
 // ProtectNetworks protects existing networks from being cleaned up at the end
 // of test runs
 func ProtectNetworks(t testingT, testEnv *Execution) {
+	if ht, ok := t.(test.HelperT); ok {
+		ht.Helper()
+	}
 	networks := getExistingNetworks(t, testEnv)
 	testEnv.ProtectNetwork(t, networks...)
 }
 
-func getExistingNetworks(t require.TestingT, testEnv *Execution) []string {
+func getExistingNetworks(t assert.TestingT, testEnv *Execution) []string {
+	if ht, ok := t.(test.HelperT); ok {
+		ht.Helper()
+	}
 	client := testEnv.APIClient()
 	networkList, err := client.NetworkList(context.Background(), types.NetworkListOptions{})
-	require.NoError(t, err, "failed to list networks")
+	assert.NilError(t, err, "failed to list networks")
 
-	networks := []string{}
+	var networks []string
 	for _, network := range networkList {
 		networks = append(networks, network.ID)
 	}
@@ -158,6 +181,9 @@ func getExistingNetworks(t require.TestingT, testEnv *Execution) []string {
 
 // ProtectPlugin adds the specified plugin(s) to be protected in case of clean
 func (e *Execution) ProtectPlugin(t testingT, plugins ...string) {
+	if ht, ok := t.(test.HelperT); ok {
+		ht.Helper()
+	}
 	for _, plugin := range plugins {
 		e.protectedElements.plugins[plugin] = struct{}{}
 	}
@@ -166,20 +192,26 @@ func (e *Execution) ProtectPlugin(t testingT, plugins ...string) {
 // ProtectPlugins protects existing plugins from being cleaned up at the end of
 // test runs
 func ProtectPlugins(t testingT, testEnv *Execution) {
+	if ht, ok := t.(test.HelperT); ok {
+		ht.Helper()
+	}
 	plugins := getExistingPlugins(t, testEnv)
 	testEnv.ProtectPlugin(t, plugins...)
 }
 
-func getExistingPlugins(t require.TestingT, testEnv *Execution) []string {
+func getExistingPlugins(t assert.TestingT, testEnv *Execution) []string {
+	if ht, ok := t.(test.HelperT); ok {
+		ht.Helper()
+	}
 	client := testEnv.APIClient()
 	pluginList, err := client.PluginList(context.Background(), filters.Args{})
 	// Docker EE does not allow cluster-wide plugin management.
 	if dclient.IsErrNotImplemented(err) {
 		return []string{}
 	}
-	require.NoError(t, err, "failed to list plugins")
+	assert.NilError(t, err, "failed to list plugins")
 
-	plugins := []string{}
+	var plugins []string
 	for _, plugin := range pluginList {
 		plugins = append(plugins, plugin.Name)
 	}
@@ -188,6 +220,9 @@ func getExistingPlugins(t require.TestingT, testEnv *Execution) []string {
 
 // ProtectVolume adds the specified volume(s) to be protected in case of clean
 func (e *Execution) ProtectVolume(t testingT, volumes ...string) {
+	if ht, ok := t.(test.HelperT); ok {
+		ht.Helper()
+	}
 	for _, volume := range volumes {
 		e.protectedElements.volumes[volume] = struct{}{}
 	}
@@ -196,16 +231,22 @@ func (e *Execution) ProtectVolume(t testingT, volumes ...string) {
 // ProtectVolumes protects existing volumes from being cleaned up at the end of
 // test runs
 func ProtectVolumes(t testingT, testEnv *Execution) {
+	if ht, ok := t.(test.HelperT); ok {
+		ht.Helper()
+	}
 	volumes := getExistingVolumes(t, testEnv)
 	testEnv.ProtectVolume(t, volumes...)
 }
 
-func getExistingVolumes(t require.TestingT, testEnv *Execution) []string {
+func getExistingVolumes(t assert.TestingT, testEnv *Execution) []string {
+	if ht, ok := t.(test.HelperT); ok {
+		ht.Helper()
+	}
 	client := testEnv.APIClient()
 	volumeList, err := client.VolumeList(context.Background(), filters.Args{})
-	require.NoError(t, err, "failed to list volumes")
+	assert.NilError(t, err, "failed to list volumes")
 
-	volumes := []string{}
+	var volumes []string
 	for _, volume := range volumeList.Volumes {
 		volumes = append(volumes, volume.Name)
 	}
